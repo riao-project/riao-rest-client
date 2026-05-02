@@ -1,0 +1,38 @@
+# Logs
+logs/
+*.log
+*.tmp
+tmp/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# Generated artifacts (generic)
+dist/
+build/
+out/
+coverage/
+cache/
+*.cache
+*.zip
+*.tar.gz
+
+# Temporary directories
+.temp/
+.tmp/
+scratch/
+
+# remrg
+.remrg/cache
