@@ -5,8 +5,9 @@
 	"author": "{{ remrg:var organization }}",
 	"license": "{{ remrg:var license }}",
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
-		"dev": "tsc -p tsconfig.json --watch",
+		"build": "vite build",
+		"dev": "vite",
+		"preview": "vite preview",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"lint": "eslint . --fix && prettier --write .",
 		"lint:check": "prettier --check . && eslint .",
@@ -23,8 +24,11 @@
 		"@typescript-eslint/eslint-plugin": "^8.57.2",
 		"@typescript-eslint/parser": "^8.57.2",
 		"eslint": "^10.1.0",
+		"globals": "^17.6.0",
 		"prettier": "^3.8.1",
 		"prettier-plugin-brace-style": "^0.10.1",
-		"typescript": "^5.9.3"
+		"terser": "^5.46.1",
+		"typescript": "^5.9.3",
+		"vite": "^8.0.9"
 	}
 }
