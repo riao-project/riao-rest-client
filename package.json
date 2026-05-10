@@ -22,7 +22,9 @@
 		"node": ">=22.0.0",
 		"npm": ">=10.8.2"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@riao/rest-contract": "^1.0.0"
+	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@types/node": "^22.19.17",

@@ -1,0 +1,1 @@
+export { RestClientError } from './error';
