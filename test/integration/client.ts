@@ -12,6 +12,7 @@ export class ProductsClient extends RiaoRestClient<Product> {
 		options: RiaoRestClientOptions = {
 			baseUrl: 'http://localhost:3000',
 			path: 'products',
+			token: 'test-token',
 		}
 	) {
 		super(options);

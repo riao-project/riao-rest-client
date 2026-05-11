@@ -224,4 +224,85 @@ describe('RiaoRestClient', () => {
 			expect(result).toEqual({});
 		});
 	});
+
+	describe('Authentication', () => {
+		it('should append static string token properly', async () => {
+			const authClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				token: 'my-static-token',
+			});
+
+			mockFetchResponse(200, []);
+			await authClient.list();
+
+			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
+				method: 'GET',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer my-static-token',
+				}),
+			});
+		});
+
+		it('should append token via callback', async () => {
+			const authClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				token: () => 'my-dynamic-token',
+			});
+
+			mockFetchResponse(200, []);
+			await authClient.list();
+
+			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
+				method: 'GET',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer my-dynamic-token',
+				}),
+			});
+		});
+
+		it('should append token via async callback', async () => {
+			const authClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				token: async () => 'my-async-dynamic-token',
+			});
+
+			mockFetchResponse(200, []);
+			await authClient.list();
+
+			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
+				method: 'GET',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer my-async-dynamic-token',
+				}),
+			});
+		});
+
+		it('should allow overriding getAuthHeaders by subclass', async () => {
+			class CustomAuthClient extends TestRestClient {
+				protected override async getAuthHeaders(): Promise<
+					Record<string, string>
+				> {
+					return { 'X-API-KEY': 'custom-key' };
+				}
+			}
+
+			const authClient = new CustomAuthClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+			});
+
+			mockFetchResponse(200, []);
+			await authClient.list();
+
+			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
+				method: 'GET',
+				headers: expect.objectContaining({
+					'X-API-KEY': 'custom-key',
+				}),
+			});
+		});
+	});
 });

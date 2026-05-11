@@ -110,6 +110,58 @@ for (const item of searchResults.records) {
 }
 ```
 
+## Authentication
+
+The client supports flexible authentication token injection to seamlessly communicate with protected endpoints. It handles static tokens, dynamic callbacks, and can also be subclassed for custom headers.
+
+### Static Token
+
+If your token doesn't change, provide it directly in the options. This standardizes to `Authorization: Bearer <token>`.
+
+```typescript
+class ProductClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({
+			baseUrl: 'https://api.example.com/v1',
+			path: '/products',
+			token: 'your-static-bearer-token',
+		});
+	}
+}
+```
+
+### Dynamic Token
+
+For tokens that refresh or change over time, provide an async callback:
+
+```typescript
+class ProductClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({
+			baseUrl: 'https://api.example.com/v1',
+			path: '/products',
+			token: async () => await fetchMyLatestToken(),
+		});
+	}
+}
+```
+
+### Custom Auth Schemes
+
+If your API requires a different authentication scheme (such as an API Key), override the protected `getAuthHeaders()` method:
+
+```typescript
+class CustomAuthClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({ baseUrl: 'https://api.example.com/v1', path: '/products' });
+	}
+
+	protected async getAuthHeaders(): Promise<Record<string, string>> {
+		return { 'X-API-KEY': 'my-custom-key' };
+	}
+}
+```
+
 ## Contributing
 
 - [Contributing Guide](./CONTRIBUTING.md)

@@ -8,7 +8,7 @@ import {
 	RiaoUpdateEndpoint,
 	DatabaseRecordWithId,
 } from '@riao/rest';
-import { RestServer } from 'api-machine';
+import { RestServer, BearerAuthenticationScheme } from 'api-machine';
 import { maindb } from '../database/main';
 
 export interface Product extends DatabaseRecordWithId {
@@ -51,6 +51,12 @@ export class TestServer extends RestServer {
 	constructor() {
 		super({
 			port: 3000,
+		});
+
+		this.authentication = new BearerAuthenticationScheme({
+			checkToken: async (token) => {
+				return ['test-token', 'test-dynamic-token'].includes(token);
+			},
 		});
 	}
 }

@@ -6,16 +6,20 @@ import {
 	SearchResponse,
 } from '@riao/rest-contract';
 
+export type AuthToken = string | (() => string | Promise<string>);
+
 export interface RiaoRestClientOptions {
 	baseUrl: string;
 	path: string;
 	headers?: Record<string, string>;
+	token?: AuthToken;
 }
 
 export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	protected baseUrl: string;
 	protected path: string;
 	protected headers: Record<string, string>;
+	protected token?: AuthToken;
 
 	constructor(options: RiaoRestClientOptions) {
 		this.baseUrl = options.baseUrl.replace(/\/$/, '');
@@ -26,6 +30,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 			'Content-Type': 'application/json',
 			...options.headers,
 		};
+		this.token = options.token;
 	}
 
 	protected getEndpointUrl(id?: string): string {
@@ -35,10 +40,12 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	}
 
 	protected async fetch<R>(url: string, options: RequestInit): Promise<R> {
+		const authHeaders = await this.getAuthHeaders();
 		const result = await fetch(url, {
 			...options,
 			headers: {
 				...this.headers,
+				...authHeaders,
 				...options.headers,
 			},
 		});
@@ -146,5 +153,26 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 			...options,
 			method: 'DELETE',
 		});
+	}
+
+	protected async getAuthorizationHeader(): Promise<string | undefined> {
+		if (!this.token) {
+			return undefined;
+		}
+
+		const tokenValue =
+			typeof this.token === 'function' ? await this.token() : this.token;
+
+		return `Bearer ${tokenValue}`;
+	}
+
+	protected async getAuthHeaders(): Promise<Record<string, string>> {
+		const authHeader = await this.getAuthorizationHeader();
+
+		if (authHeader) {
+			return { Authorization: authHeader };
+		}
+
+		return {};
 	}
 }
