@@ -23,6 +23,6 @@
 		},
 		"declaration": true
 	},
-	"include": ["src", "test", "vite.config.ts", "vitest.config.ts"],
+	"include": ["database", "src", "test", "vite.config.ts", "vitest.config.ts"],
 	"exclude": ["node_modules", "dist"]
 }

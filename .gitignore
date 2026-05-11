@@ -18,6 +18,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+*.env
 
 # Generated artifacts (generic)
 dist/
@@ -39,3 +40,7 @@ scratch/
 
 # remrg
 .remrg/cache
+
+# riao
+*.db
+database/**/.schema
