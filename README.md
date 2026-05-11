@@ -1,6 +1,6 @@
 # @riao/rest-client
 
-{{ remrg:task Write a brief project description }}
+A flexible, type-safe REST API client for communicating with Riao applications.
 
 ## Installation
 
@@ -10,7 +10,105 @@ npm install @riao/rest-client
 
 ## Quick Start
 
-### Basic Usage
+### Basic Setup
+
+```typescript
+import { RiaoRestClient } from '@riao/rest-client';
+
+// 1. Define your data model
+interface Product {
+	id: number;
+	name: string;
+}
+
+// 2. Create a client for your resource
+class ProductClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({
+			baseUrl: 'https://api.example.com/v1',
+			path: '/products',
+		});
+	}
+}
+
+// 3. Use the client
+const productClient = new ProductClient();
+const newProduct = await productClient.create({ name: 'My Product' });
+const product = await productClient.get(newProduct.id);
+```
+
+## Operations
+
+The `RiaoRestClient` provides standard CRUD and searching capabilities:
+
+### Create
+
+```typescript
+const { id } = await productClient.create({ name: 'Apples' });
+```
+
+### Get (Read)
+
+```typescript
+const item = await productClient.get(myProduct.id);
+```
+
+### Update
+
+```typescript
+await productClient.update(myProduct.id, { name: 'Green Apples' });
+```
+
+### Delete
+
+```typescript
+await productClient.delete(myProduct.id);
+```
+
+### List
+
+Retrieves a paginated list of items.
+
+```typescript
+const items = await productClient.list({
+	limit: 10,
+	offset: 0,
+	orderBy: 'name',
+	orderDirection: 'ASC',
+});
+
+for (const item of items) {
+	console.log(item.name);
+}
+```
+
+### Search
+
+Search records using `@riao/rest-contract` search requests.
+
+```typescript
+const searchResults = await productClient.search({
+	where: [
+		{
+			column: 'name',
+			operator: 'LIKE',
+			value: '%Apple%',
+		},
+	],
+	order: [
+		{
+			column: 'name',
+			direction: 'ASC',
+		},
+	],
+	limit: 10,
+	offset: 10,
+});
+
+for (const item of searchResults.records) {
+	console.log(item.name);
+}
+```
 
 ## Contributing
 
@@ -20,4 +118,4 @@ npm install @riao/rest-client
 
 ## License
 
-Licensed under the [MIT](LICENSE.md).
+Licensed under the [MIT License](LICENSE.md).
