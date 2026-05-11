@@ -36,6 +36,26 @@ describe('Auth Integration', () => {
 		await expect(client.list()).rejects.toThrow(/401/);
 	});
 
+	it('should throw 401 if callback returns undefined synchronously', async () => {
+		const client = new ProductsClient({
+			baseUrl: 'http://localhost:3000',
+			path: 'products',
+			token: () => undefined,
+		});
+
+		await expect(client.list()).rejects.toThrow(/401/);
+	});
+
+	it('should throw 401 if callback returns undefined asynchronously', async () => {
+		const client = new ProductsClient({
+			baseUrl: 'http://localhost:3000',
+			path: 'products',
+			token: async () => undefined,
+		});
+
+		await expect(client.list()).rejects.toThrow(/401/);
+	});
+
 	it('should fail with 401 when providing no token', async () => {
 		// Don't provide a token
 		const client = new ProductsClient({

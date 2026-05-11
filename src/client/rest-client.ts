@@ -6,7 +6,9 @@ import {
 	SearchResponse,
 } from '@riao/rest-contract';
 
-export type AuthToken = string | (() => string | Promise<string>);
+export type AuthToken =
+	| string
+	| (() => string | undefined | Promise<string | undefined>);
 
 export interface RiaoRestClientOptions {
 	baseUrl: string;
@@ -162,6 +164,10 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 
 		const tokenValue =
 			typeof this.token === 'function' ? await this.token() : this.token;
+
+		if (!tokenValue) {
+			return undefined;
+		}
 
 		return `Bearer ${tokenValue}`;
 	}
