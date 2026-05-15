@@ -10,11 +10,18 @@ export type AuthToken =
 	| string
 	| (() => string | undefined | Promise<string | undefined>);
 
+export interface RetryOptions {
+	attempts: number;
+	delayType: 'constant' | 'exponential';
+	delay: number;
+}
+
 export interface RiaoRestClientOptions {
 	baseUrl: string;
 	path: string;
 	headers?: Record<string, string>;
 	token?: AuthToken;
+	retry?: Partial<RetryOptions>;
 }
 
 export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
@@ -22,6 +29,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	protected path: string;
 	protected headers: Record<string, string>;
 	protected token?: AuthToken;
+	protected retry: RetryOptions;
 
 	constructor(options: RiaoRestClientOptions) {
 		this.baseUrl = options.baseUrl.replace(/\/$/, '');
@@ -33,6 +41,11 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 			...options.headers,
 		};
 		this.token = options.token;
+		this.retry = {
+			attempts: options.retry?.attempts ?? 0,
+			delayType: options.retry?.delayType ?? 'constant',
+			delay: options.retry?.delay ?? 1000,
+		};
 	}
 
 	protected getEndpointUrl(id?: string): string {
@@ -42,42 +55,74 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	}
 
 	protected async fetch<R>(url: string, options: RequestInit): Promise<R> {
-		const authHeaders = await this.getAuthHeaders();
-		const result = await fetch(url, {
-			...options,
-			headers: {
-				...this.headers,
-				...authHeaders,
-				...options.headers,
-			},
-		});
+		let attempts = 0;
+		const maxAttempts = this.retry.attempts + 1;
 
-		if (!result.ok) {
-			let message = result.statusText;
-
+		while (attempts < maxAttempts) {
 			try {
-				const body = await result.json();
+				const authHeaders = await this.getAuthHeaders();
+				const result = await fetch(url, {
+					...options,
+					headers: {
+						...this.headers,
+						...authHeaders,
+						...options.headers,
+					},
+				});
 
-				if (body && typeof body === 'object' && 'message' in body) {
-					message = body.message;
+				if (!result.ok) {
+					let message = result.statusText;
+
+					try {
+						const body = await result.json();
+
+						if (body && typeof body === 'object' && 'message' in body) {
+							message = body.message;
+						}
+					}
+					catch {
+						// Ignore
+					}
+
+					throw new RestClientError(
+						`HTTP Error ${result.status}: ${message}`,
+						result.status,
+						result
+					);
 				}
-			}
-			catch {
-				// Ignore
-			}
 
-			throw new RestClientError(
-				`HTTP Error ${result.status}: ${message}`,
-				result.status,
-				result
-			);
+				if (result.status === 204) {
+					return {} as R;
+				}
+
+				return (await result.json()) as R;
+			}
+			catch (error: unknown) {
+				attempts++;
+
+				const isRestClientError = error instanceof RestClientError;
+				const isTransientStatus =
+					isRestClientError &&
+					[408, 429, 500, 502, 503, 504].includes(error.status);
+				const isNetworkError = error instanceof TypeError;
+
+				if (
+					attempts >= maxAttempts ||
+					(!isTransientStatus && !isNetworkError)
+				) {
+					throw error;
+				}
+
+				const delay =
+					this.retry.delayType === 'exponential'
+						? this.retry.delay * 2 ** (attempts - 1)
+						: this.retry.delay;
+
+				await new Promise((resolve) => setTimeout(resolve, delay));
+			}
 		}
 
-		if (result.status === 204) {
-			return {} as R;
-		}
-
-		return (await result.json()) as R;
+		throw new Error('Failed to fetch after maximum retry attempts');
 	}
 
 	public async list(query?: ListRequest, options?: RequestInit): Promise<T[]> {

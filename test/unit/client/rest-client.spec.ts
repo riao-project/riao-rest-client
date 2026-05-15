@@ -225,6 +225,193 @@ describe('RiaoRestClient', () => {
 		});
 	});
 
+	describe('Retry Logic', () => {
+		beforeEach(() => {
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('should retry on transient HTTP error codes', async () => {
+			const retryClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: {
+					attempts: 2,
+					delay: 100,
+				},
+			});
+
+			fetchMock
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 503,
+					statusText: 'Service Unavailable',
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 502,
+					statusText: 'Bad Gateway',
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: true,
+					status: 200,
+					statusText: 'OK',
+					json: async () => [{ id: '1', name: 'Alice' }],
+				});
+
+			const promise = retryClient.list();
+
+			// First retry after 100ms
+			await vi.advanceTimersByTimeAsync(100);
+			// Second retry after 100ms
+			await vi.advanceTimersByTimeAsync(100);
+
+			const result = await promise;
+
+			expect(fetchMock).toHaveBeenCalledTimes(3);
+			expect(result).toEqual([{ id: '1', name: 'Alice' }]);
+		});
+
+		it('should retry on fetch network errors', async () => {
+			const retryClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: {
+					attempts: 2,
+					delay: 100,
+				},
+			});
+
+			fetchMock
+				.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+				.mockResolvedValueOnce({
+					ok: true,
+					status: 200,
+					statusText: 'OK',
+					json: async () => [{ id: '2', name: 'Bob' }],
+				});
+
+			const promise = retryClient.list();
+
+			await vi.advanceTimersByTimeAsync(100);
+
+			const result = await promise;
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(result).toEqual([{ id: '2', name: 'Bob' }]);
+		});
+
+		it('should not retry on non-transient HTTP errors', async () => {
+			const retryClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: {
+					attempts: 2,
+					delay: 100,
+				},
+			});
+
+			fetchMock.mockResolvedValueOnce({
+				ok: false,
+				status: 400,
+				statusText: 'Bad Request',
+				json: async () => ({ message: 'Invalid data' }),
+			});
+
+			await expect(retryClient.list()).rejects.toThrow(
+				'HTTP Error 400: Invalid data'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+
+		it('should respect exponential delay', async () => {
+			const retryClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: {
+					attempts: 3,
+					delayType: 'exponential',
+					delay: 100, // 100, 200, 400
+				},
+			});
+
+			fetchMock
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 500,
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 500,
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 500,
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: true,
+					status: 200,
+					json: async () => [],
+				});
+
+			const promise = retryClient.list();
+
+			// 100ms
+			await vi.advanceTimersByTimeAsync(100);
+			// 200ms
+			await vi.advanceTimersByTimeAsync(200);
+			// 400ms
+			await vi.advanceTimersByTimeAsync(400);
+
+			await promise;
+
+			expect(fetchMock).toHaveBeenCalledTimes(4);
+		});
+
+		it('should throw if all retries are exhausted', async () => {
+			const retryClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: {
+					attempts: 1,
+					delay: 100,
+				},
+			});
+
+			fetchMock
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 500,
+					statusText: 'Internal Server Error',
+					json: async () => ({}),
+				})
+				.mockResolvedValueOnce({
+					ok: false,
+					status: 500,
+					statusText: 'Internal Server Error',
+					json: async () => ({}),
+				});
+
+			const promise = retryClient.list();
+			promise.catch(() => {}); // prevent UnhandledRejection during timer advance
+
+			await vi.advanceTimersByTimeAsync(100);
+
+			await expect(promise).rejects.toThrow(
+				'HTTP Error 500: Internal Server Error'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		});
+	});
+
 	describe('Authentication', () => {
 		it('should append static string token properly', async () => {
 			const authClient = new TestRestClient({

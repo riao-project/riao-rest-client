@@ -162,6 +162,28 @@ class CustomAuthClient extends RiaoRestClient<Product> {
 }
 ```
 
+## Automatic Retries
+
+The client can automatically retry failed requests due to transient issues (e.g., network errors, or HTTP 408, 429, 500, 502, 503, 504 status codes).
+
+By default, retries are disabled. To enable them, provide the `retry` configuration in the client options.
+
+```typescript
+class ProductClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({
+			baseUrl: 'https://api.example.com/v1',
+			path: '/products',
+			retry: {
+				attempts: 3, // Retry up to 3 times
+				delayType: 'exponential', // 'constant' or 'exponential' (default: 'constant')
+				delay: 1000, // Initial delay in milliseconds (default: 1000)
+			},
+		});
+	}
+}
+```
+
 ## Contributing
 
 - [Contributing Guide](./CONTRIBUTING.md)
