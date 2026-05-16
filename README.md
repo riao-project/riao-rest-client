@@ -162,6 +162,74 @@ class CustomAuthClient extends RiaoRestClient<Product> {
 }
 ```
 
+## Interceptors
+
+You can intercept requests and responses dynamically without extending the base class using the Interceptor API. This is useful for injecting dynamic headers, logging requests, or handling response transformations.
+
+### Request Interceptors
+
+Request interceptors allow you to modify the request `url` and `options` before the request is made.
+
+```typescript
+const client = new ProductClient();
+
+client.onRequest(async (req) => {
+	return {
+		...req,
+		options: {
+			...req.options,
+			headers: {
+				...req.options.headers,
+				'X-Request-Id': crypto.randomUUID(),
+			},
+		},
+	};
+});
+```
+
+### Response Interceptors
+
+Response interceptors allow you to globally inspect or mutate the standard `Response` object before the client parses it.
+
+```typescript
+client.onResponse(async (res, reqContext) => {
+	console.log(`[HTTP ${res.status}] ${reqContext.url}`);
+
+	if (res.status === 401) {
+		// Log out user, trigger refresh, etc.
+	}
+
+	return res;
+});
+```
+
+### Constructor Configuration
+
+Alternatively, you can provide interceptors directly in the options object:
+
+```typescript
+class ProductClient extends RiaoRestClient<Product> {
+	constructor() {
+		super({
+			baseUrl: 'https://api.example.com/v1',
+			path: '/products',
+			interceptors: {
+				request: [
+					(req) => {
+						/* Modify request */ return req;
+					},
+				],
+				response: [
+					(res, req) => {
+						/* Inspect response */ return res;
+					},
+				],
+			},
+		});
+	}
+}
+```
+
 ## Automatic Retries
 
 The client can automatically retry failed requests due to transient issues (e.g., network errors, or HTTP 408, 429, 500, 502, 503, 504 status codes).

@@ -16,12 +16,27 @@ export interface RetryOptions {
 	delay: number;
 }
 
+export type RequestInterceptorContext = { url: string; options: RequestInit };
+
+export type RequestInterceptor = (
+	context: RequestInterceptorContext
+) => RequestInterceptorContext | Promise<RequestInterceptorContext>;
+
+export type ResponseInterceptor = (
+	response: Response,
+	context: RequestInterceptorContext
+) => Response | Promise<Response>;
+
 export interface RiaoRestClientOptions {
 	baseUrl: string;
 	path: string;
 	headers?: Record<string, string>;
 	token?: AuthToken;
 	retry?: Partial<RetryOptions>;
+	interceptors?: {
+		request?: RequestInterceptor[];
+		response?: ResponseInterceptor[];
+	};
 }
 
 export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
@@ -30,6 +45,8 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	protected headers: Record<string, string>;
 	protected token?: AuthToken;
 	protected retry: RetryOptions;
+	protected requestInterceptors: RequestInterceptor[];
+	protected responseInterceptors: ResponseInterceptor[];
 
 	constructor(options: RiaoRestClientOptions) {
 		this.baseUrl = options.baseUrl.replace(/\/$/, '');
@@ -46,6 +63,20 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 			delayType: options.retry?.delayType ?? 'constant',
 			delay: options.retry?.delay ?? 1000,
 		};
+		this.requestInterceptors = options.interceptors?.request ?? [];
+		this.responseInterceptors = options.interceptors?.response ?? [];
+	}
+
+	public onRequest(interceptor: RequestInterceptor): this {
+		this.requestInterceptors.push(interceptor);
+
+		return this;
+	}
+
+	public onResponse(interceptor: ResponseInterceptor): this {
+		this.responseInterceptors.push(interceptor);
+
+		return this;
 	}
 
 	protected getEndpointUrl(id?: string): string {
@@ -61,14 +92,28 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		while (attempts < maxAttempts) {
 			try {
 				const authHeaders = await this.getAuthHeaders();
-				const result = await fetch(url, {
-					...options,
-					headers: {
-						...this.headers,
-						...authHeaders,
-						...options.headers,
+
+				let requestContext: RequestInterceptorContext = {
+					url,
+					options: {
+						...options,
+						headers: {
+							...this.headers,
+							...authHeaders,
+							...options.headers,
+						},
 					},
-				});
+				};
+
+				for (const interceptor of this.requestInterceptors) {
+					requestContext = await interceptor(requestContext);
+				}
+
+				let result = await fetch(requestContext.url, requestContext.options);
+
+				for (const interceptor of this.responseInterceptors) {
+					result = await interceptor(result, requestContext);
+				}
 
 				if (!result.ok) {
 					let message = result.statusText;

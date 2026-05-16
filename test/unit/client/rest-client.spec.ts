@@ -492,4 +492,88 @@ describe('RiaoRestClient', () => {
 			});
 		});
 	});
+
+	describe('Interceptors', () => {
+		it('should run request interceptors sequentially', async () => {
+			client.onRequest((req) => {
+				return {
+					...req,
+					url: req.url + '?first=true',
+					options: {
+						...req.options,
+						headers: {
+							...req.options.headers,
+							'X-Request-Id': '123',
+						},
+					},
+				};
+			});
+
+			client.onRequest(async (req) => {
+				return {
+					...req,
+					url: req.url + '?second=true',
+				};
+			});
+
+			mockFetchResponse(200, []);
+
+			await client.list();
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users?first=true?second=true',
+				expect.objectContaining({
+					headers: expect.objectContaining({
+						'X-Request-Id': '123',
+						'Content-Type': 'application/json',
+					}),
+				})
+			);
+		});
+
+		it('should run response interceptors', async () => {
+			const originalResponse = new Response(
+				JSON.stringify([{ id: '1', name: 'Original' }]),
+				{ status: 200 }
+			);
+			const injectedResponse = new Response(
+				JSON.stringify([{ id: '2', name: 'Injected' }]),
+				{ status: 200 }
+			);
+
+			fetchMock.mockResolvedValueOnce(originalResponse);
+
+			client.onResponse(async (res, req) => {
+				expect(req.url).toBe('https://api.example.com/users');
+				return res.status === 200 ? injectedResponse : res;
+			});
+
+			const result = await client.list();
+			expect(result).toEqual([{ id: '2', name: 'Injected' }]);
+		});
+
+		it('should accept interceptors via RiaoRestClientOptions', async () => {
+			const interceptorClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				interceptors: {
+					request: [
+						(req) => ({
+							...req,
+							url: req.url + '?fromOption=true',
+						}),
+					],
+				},
+			});
+
+			mockFetchResponse(200, []);
+
+			await interceptorClient.list();
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users?fromOption=true',
+				expect.any(Object)
+			);
+		});
+	});
 });

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Additions
 
+- Added `onRequest` and `onResponse` interceptors to modify request and response contexts dynamically.
 - Added automatic retry configuration (`retry` option) for transient network and HTTP errors
 
 ## [1.1.1]
