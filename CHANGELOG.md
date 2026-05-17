@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [UNRELEASED]
 
+## [1.3.0]
+
 ### Additions
 
 - Add timeout parameter & default timeout of 30seconds
