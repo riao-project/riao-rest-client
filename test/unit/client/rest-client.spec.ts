@@ -77,12 +77,15 @@ describe('RiaoRestClient', () => {
 
 			const result = await client.list();
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
-				method: 'GET',
-				headers: expect.objectContaining({
-					'Content-Type': 'application/json',
-				}),
-			});
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users',
+				expect.objectContaining({
+					method: 'GET',
+					headers: expect.objectContaining({
+						'Content-Type': 'application/json',
+					}),
+				})
+			);
 			expect(result).toEqual(mockData);
 		});
 
@@ -423,12 +426,15 @@ describe('RiaoRestClient', () => {
 			mockFetchResponse(200, []);
 			await authClient.list();
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
-				method: 'GET',
-				headers: expect.objectContaining({
-					Authorization: 'Bearer my-static-token',
-				}),
-			});
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users',
+				expect.objectContaining({
+					method: 'GET',
+					headers: expect.objectContaining({
+						Authorization: 'Bearer my-static-token',
+					}),
+				})
+			);
 		});
 
 		it('should append token via callback', async () => {
@@ -441,12 +447,15 @@ describe('RiaoRestClient', () => {
 			mockFetchResponse(200, []);
 			await authClient.list();
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
-				method: 'GET',
-				headers: expect.objectContaining({
-					Authorization: 'Bearer my-dynamic-token',
-				}),
-			});
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users',
+				expect.objectContaining({
+					method: 'GET',
+					headers: expect.objectContaining({
+						Authorization: 'Bearer my-dynamic-token',
+					}),
+				})
+			);
 		});
 
 		it('should append token via async callback', async () => {
@@ -459,12 +468,15 @@ describe('RiaoRestClient', () => {
 			mockFetchResponse(200, []);
 			await authClient.list();
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
-				method: 'GET',
-				headers: expect.objectContaining({
-					Authorization: 'Bearer my-async-dynamic-token',
-				}),
-			});
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users',
+				expect.objectContaining({
+					method: 'GET',
+					headers: expect.objectContaining({
+						Authorization: 'Bearer my-async-dynamic-token',
+					}),
+				})
+			);
 		});
 
 		it('should allow overriding getAuthHeaders by subclass', async () => {
@@ -484,12 +496,15 @@ describe('RiaoRestClient', () => {
 			mockFetchResponse(200, []);
 			await authClient.list();
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/users', {
-				method: 'GET',
-				headers: expect.objectContaining({
-					'X-API-KEY': 'custom-key',
-				}),
-			});
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://api.example.com/users',
+				expect.objectContaining({
+					method: 'GET',
+					headers: expect.objectContaining({
+						'X-API-KEY': 'custom-key',
+					}),
+				})
+			);
 		});
 	});
 
@@ -573,6 +588,112 @@ describe('RiaoRestClient', () => {
 			expect(fetchMock).toHaveBeenCalledWith(
 				'https://api.example.com/users?fromOption=true',
 				expect.any(Object)
+			);
+		});
+	});
+
+	describe('Timeouts', () => {
+		it('should abort request if timeout limit is reached', async () => {
+			const timeoutClient = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				timeout: 10,
+				retry: { attempts: 0 },
+			});
+
+			fetchMock.mockImplementationOnce((url, req) => {
+				return new Promise((resolve, reject) => {
+					if (req.signal) {
+						req.signal.addEventListener('abort', () => {
+							const error = new DOMException('timeout', 'TimeoutError');
+							reject(error);
+						});
+					}
+				});
+			});
+
+			await expect(timeoutClient.list()).rejects.toThrow('timeout');
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					signal: expect.any(Object),
+				})
+			);
+		});
+
+		it('should not retry on manual AbortError', async () => {
+			const clientWithRetry = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				retry: { attempts: 5 },
+			});
+
+			// Setup manual abort
+			const controller = new AbortController();
+
+			fetchMock.mockImplementationOnce(
+				() =>
+					new Promise((_, reject) => {
+						const error = new Error('abort');
+						error.name = 'AbortError';
+						reject(error);
+					})
+			);
+
+			await expect(
+				clientWithRetry.list(undefined, { signal: controller.signal })
+			).rejects.toThrow();
+
+			// Should only attempt once, no retries
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+
+		it('should retry on TimeoutError', async () => {
+			const clientWithRetry = new TestRestClient({
+				baseUrl: 'https://api.example.com/',
+				path: 'users',
+				timeout: 10, // Instance-level timeout
+				retry: { attempts: 1, delay: 1 },
+			});
+
+			// Mock a timeout error on the first call, success on second
+			fetchMock.mockImplementationOnce(() =>
+				Promise.reject(new DOMException('timeout', 'TimeoutError'))
+			);
+			fetchMock.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				json: async () => [{ id: '1', name: 'TimeoutRetry' }],
+			} as Response);
+
+			const result = await clientWithRetry.list();
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(result).toEqual([{ id: '1', name: 'TimeoutRetry' }]);
+		});
+
+		it('should accept per-request timeout override', async () => {
+			fetchMock.mockImplementationOnce((url, req) => {
+				return new Promise((resolve, reject) => {
+					if (req.signal) {
+						req.signal.addEventListener('abort', () => {
+							const error = new DOMException('timeout', 'TimeoutError');
+							reject(error);
+						});
+					}
+				});
+			});
+
+			await expect(client.list(undefined, { timeout: 10 })).rejects.toThrow(
+				'timeout'
+			);
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					signal: expect.any(Object),
+				})
 			);
 		});
 	});

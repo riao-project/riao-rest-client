@@ -27,12 +27,15 @@ export type ResponseInterceptor = (
 	context: RequestInterceptorContext
 ) => Response | Promise<Response>;
 
+export type RiaoRequestInit = RequestInit & { timeout?: number };
+
 export interface RiaoRestClientOptions {
 	baseUrl: string;
 	path: string;
 	headers?: Record<string, string>;
 	token?: AuthToken;
 	retry?: Partial<RetryOptions>;
+	timeout?: number;
 	interceptors?: {
 		request?: RequestInterceptor[];
 		response?: ResponseInterceptor[];
@@ -45,6 +48,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	protected headers: Record<string, string>;
 	protected token?: AuthToken;
 	protected retry: RetryOptions;
+	protected timeout?: number;
 	protected requestInterceptors: RequestInterceptor[];
 	protected responseInterceptors: ResponseInterceptor[];
 
@@ -53,6 +57,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		this.path = options.path.startsWith('/')
 			? options.path
 			: '/' + options.path;
+		this.timeout = options.timeout ?? 30000;
 		this.headers = {
 			'Content-Type': 'application/json',
 			...options.headers,
@@ -85,7 +90,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		return id ? `${base}/${id}` : base;
 	}
 
-	protected async fetch<R>(url: string, options: RequestInit): Promise<R> {
+	protected async fetch<R>(url: string, options: RiaoRequestInit): Promise<R> {
 		let attempts = 0;
 		const maxAttempts = this.retry.attempts + 1;
 
@@ -93,10 +98,20 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 			try {
 				const authHeaders = await this.getAuthHeaders();
 
+				const reqOptions = { ...options };
+				const timeoutMs = reqOptions.timeout ?? this.timeout;
+
+				if (timeoutMs && !reqOptions.signal) {
+					reqOptions.signal = AbortSignal.timeout(timeoutMs);
+				}
+
+				// Don't pass our custom timeout prop into the actual fetch Init
+				delete reqOptions.timeout;
+
 				let requestContext: RequestInterceptorContext = {
 					url,
 					options: {
-						...options,
+						...reqOptions,
 						headers: {
 							...this.headers,
 							...authHeaders,
@@ -150,10 +165,15 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 					isRestClientError &&
 					[408, 429, 500, 502, 503, 504].includes(error.status);
 				const isNetworkError = error instanceof TypeError;
+				const isTimeoutError =
+					error instanceof Error && error.name === 'TimeoutError';
+				const isAbortError =
+					error instanceof Error && error.name === 'AbortError';
 
 				if (
 					attempts >= maxAttempts ||
-					(!isTransientStatus && !isNetworkError)
+					isAbortError ||
+					(!isTransientStatus && !isNetworkError && !isTimeoutError)
 				) {
 					throw error;
 				}
@@ -170,7 +190,10 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		throw new Error('Failed to fetch after maximum retry attempts');
 	}
 
-	public async list(query?: ListRequest, options?: RequestInit): Promise<T[]> {
+	public async list(
+		query?: ListRequest,
+		options?: RiaoRequestInit
+	): Promise<T[]> {
 		let url = this.getEndpointUrl();
 
 		if (query) {
@@ -202,7 +225,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		return this.fetch<T[]>(url, { ...options, method: 'GET' });
 	}
 
-	public async get(id: string, options?: RequestInit): Promise<T> {
+	public async get(id: string, options?: RiaoRequestInit): Promise<T> {
 		return this.fetch<T>(this.getEndpointUrl(id), {
 			...options,
 			method: 'GET',
@@ -211,7 +234,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 
 	public async search(
 		query: SearchRequest,
-		options?: RequestInit
+		options?: RiaoRequestInit
 	): Promise<SearchResponse<T>> {
 		return this.fetch<SearchResponse<T>>(`${this.baseUrl}${this.path}/search`, {
 			...options,
@@ -220,7 +243,10 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		});
 	}
 
-	public async create(record: Partial<T>, options?: RequestInit): Promise<T> {
+	public async create(
+		record: Partial<T>,
+		options?: RiaoRequestInit
+	): Promise<T> {
 		return this.fetch<T>(this.getEndpointUrl(), {
 			...options,
 			method: 'POST',
@@ -231,7 +257,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 	public async update(
 		id: string,
 		record: Partial<T>,
-		options?: RequestInit
+		options?: RiaoRequestInit
 	): Promise<void> {
 		await this.fetch<void>(this.getEndpointUrl(id), {
 			...options,
@@ -240,7 +266,7 @@ export abstract class RiaoRestClient<T extends DatabaseRecordWithId> {
 		});
 	}
 
-	public async delete(id: string, options?: RequestInit): Promise<void> {
+	public async delete(id: string, options?: RiaoRequestInit): Promise<void> {
 		await this.fetch<void>(this.getEndpointUrl(id), {
 			...options,
 			method: 'DELETE',
